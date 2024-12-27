@@ -1,0 +1,63 @@
+name: NodeJS with Webpack
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+
+    strategy:
+      matrix:
+        node-version: [18.x, 20.x, 22.x]
+
+    steps:
+    - name: Checkout Repository
+      uses: actions/checkout@v4
+
+    - name: Set up Node.js ${{ matrix.node-version }}
+      uses: actions/setup-node@v4
+      with:
+        node-version: ${{ matrix.node-version }}
+
+    - name: Cache Node.js Modules
+      uses: actions/cache@v3
+      with:
+        path: ~/.npm
+        key: ${{ runner.os }}-node-${{ hashFiles('package-lock.json') }}
+        restore-keys: |
+          ${{ runner.os }}-node-
+
+    - name: Install Dependencies
+      run: npm install
+
+    - name: Lint Code
+      run: npm run lint
+
+    - name: Run Tests
+      run: npm test
+
+    - name: Build Project
+      run: npx webpack
+
+    - name: Upload Artifacts
+      uses: actions/upload-artifact@v3
+      with:
+        name: build
+        path: ./dist
+
+    - name: Notify Slack
+      if: always()
+      uses: 8398a7/action-slack@v4
+      with:
+        status: ${{ job.status }}
+        fields: workflow,job,commit,repo,ref,author,took
+      env:
+        SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+
+    - name: Deploy
+      if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+      run: ./deploy.sh
